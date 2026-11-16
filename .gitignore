@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.ruff_cache/
+venv/
+env/
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Local PDFs and scratch artifacts — never commit documents or generated output
+*.pdf
+_gui_shot*.png
+*.log
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.DS_Store
+.idea/
+.vscode/
