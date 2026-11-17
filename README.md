@@ -215,3 +215,9 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed \
   right for search/copy, with only approximate highlight geometry.
   Rotated pages are skipped by the OCR pass. The exe finds Tesseract on
   PATH or in Program Files; install the engine separately for OCR.
+
+## License
+
+GPL-3.0-only — see [LICENSE](LICENSE). Document-processing libraries used are
+permissively or GPL-compatible licensed (pikepdf MPL-2.0, Pillow MIT-style,
+QPDF Apache-2.0, pdfium Apache-2.0, Tesseract Apache-2.0, reportlab BSD-3).
