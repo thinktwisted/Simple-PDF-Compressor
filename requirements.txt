@@ -1,0 +1,9 @@
+# Core (CLI + GUI)
+pikepdf>=10.0
+Pillow>=10.0
+
+# GUI extras
+tkinterdnd2>=0.4        # Explorer drag & drop
+pytesseract>=0.3.10     # OCR (also needs the Tesseract engine installed)
+pypdfium2>=4.0          # page rendering for OCR
+reportlab>=4.0          # invisible text-layer overlay

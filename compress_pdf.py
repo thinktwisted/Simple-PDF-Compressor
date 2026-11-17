@@ -180,7 +180,8 @@ def compress_images(pdf: Pdf, quality: int, max_dim: int, log=None) -> int:
 
 def compress_file(src, dst, *, quality: int = 60, max_dim: int = 1600,
                   no_images: bool = False, linearize: bool = False,
-                  password: str = "", log=None) -> tuple[int, int]:
+                  password: str = "", ocr: str | None = None,
+                  log=None) -> tuple[int, int]:
     """Compress one PDF; returns (before_bytes, after_bytes). Raises pikepdf errors."""
     src, dst = Path(src), Path(dst)
     with Pdf.open(src, password=password) as pdf:
@@ -191,6 +192,11 @@ def compress_file(src, dst, *, quality: int = 60, max_dim: int = 1600,
             saved = compress_images(pdf, quality, max_dim, log)
             if log and saved:
                 log(f"  saved {saved / 1024 / 1024:.2f} MiB in images")
+        if ocr:
+            import ocr_layer
+            pages, words = ocr_layer.add_text_layer(pdf, lang=ocr, log=log)
+            if log:
+                log(f"  OCR: {words} words on {pages} pages")
         pdf.save(dst,
                  compress_streams=True,
                  object_stream_mode=pikepdf.ObjectStreamMode.generate,
@@ -215,8 +221,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--linearize", action="store_true",
                     help="linearize output (faster first page, slightly larger)")
     ap.add_argument("--password", default="", help="password if the input is encrypted")
+    ap.add_argument("--ocr", nargs="?", const="eng", default=None, metavar="LANG",
+                    help="add invisible OCR text layer (default language: eng)")
     ap.add_argument("-v", "--verbose", action="store_true",
-                    help="report each replaced image")
+                    help="report each replaced image and OCR page")
     args = ap.parse_args(argv)
 
     if not 1 <= args.quality <= 100:
@@ -231,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
                                       no_images=args.no_images,
                                       linearize=args.linearize,
                                       password=args.password,
+                                      ocr=args.ocr,
                                       log=print if args.verbose else None)
     except pikepdf.PasswordError:
         sys.exit(f"{args.input}: encrypted or wrong password")
@@ -238,6 +247,8 @@ def main(argv: list[str] | None = None) -> int:
         sys.exit(f"{args.input}: {exc}")
     except OSError as exc:
         sys.exit(f"{args.input}: {exc}")
+    except RuntimeError as exc:          # e.g. Tesseract not installed
+        sys.exit(str(exc))
 
     if after >= before:
         print(f"No reduction achieved: {before/1024:.0f} KiB -> {after/1024:.0f} KiB "

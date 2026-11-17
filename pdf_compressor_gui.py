@@ -19,6 +19,11 @@ from tkinter import filedialog, ttk
 import compress_pdf as core
 
 try:
+    import ocr_layer
+except ImportError:
+    ocr_layer = None
+
+try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
 except ImportError:              # without it the app works, minus drag & drop
     DND_FILES = None
@@ -113,7 +118,29 @@ class App(ttk.Frame):
         self.res.pack(side="left", padx=6)
         self.lossless = tk.BooleanVar(value=False)
         ttk.Checkbutton(opt, text="Lossless only (don't touch images)",
-                        variable=self.lossless).pack(anchor="w", pady=(6, 0))
+                        variable=self.lossless).pack(anchor="w")
+        r3 = ttk.Frame(opt)
+        r3.pack(fill="x", pady=(6, 0))
+        self.ocr_on = tk.BooleanVar(value=False)
+        self.ocr_cb = ttk.Checkbutton(r3, text="Add searchable text (OCR)",
+                                       variable=self.ocr_on)
+        self.ocr_cb.pack(side="left")
+        self.ocr_lang = ttk.Combobox(r3, state="readonly", width=7, values=["eng"])
+        self.ocr_lang.current(0)
+        self.ocr_lang.pack(side="left", padx=6)
+        self.ocr_note = ttk.Label(r3, foreground="#666")
+        self.ocr_note.pack(side="left")
+        self.ocr_have = ocr_layer is not None and ocr_layer.available()
+        if self.ocr_have:
+            langs = ocr_layer.languages()
+            self.ocr_lang["values"] = langs
+            self.ocr_lang.set("eng" if "eng" in langs else langs[0])
+            self.ocr_note.configure(text="adds ~1-3 s per page")
+        else:
+            self.ocr_cb.state(["disabled"])
+            self.ocr_lang.state(["disabled"])
+            self.ocr_note.configure(text="requires Tesseract (winget install "
+                                          "UB-Mannheim.TesseractOCR)")
 
         # ---- run / status ----
         run = ttk.Frame(self)
@@ -230,15 +257,16 @@ class App(ttk.Frame):
                       "overwritten. Remove it from the list.")
             return
         max_dim = RES_OPTIONS[self.res.current()][1]
+        ocr = self.ocr_lang.get() if (self.ocr_on.get() and self.ocr_have) else None
         self.busy = True
         self.start_btn.state(["disabled"])
         self.pbar.configure(maximum=len(files), value=0)
         self.status.configure(text=f"Compressing 0/{len(files)}…")
         threading.Thread(target=self._worker,
-                         args=(files, dsts, quality, max_dim, lossless),
+                         args=(files, dsts, quality, max_dim, lossless, ocr),
                          daemon=True).start()
 
-    def _worker(self, files, dsts, quality, max_dim, lossless):
+    def _worker(self, files, dsts, quality, max_dim, lossless, ocr):
         ok = 0
         for i, (src, dst) in enumerate(zip(files, dsts, strict=True), 1):
             self.q.put(("file", i, src.name))
@@ -247,7 +275,7 @@ class App(ttk.Frame):
                     raise ValueError("refusing to overwrite the input file")
                 before, after = core.compress_file(
                     src, dst, quality=quality, max_dim=max_dim,
-                    no_images=lossless, log=self._log)
+                    no_images=lossless, ocr=ocr, log=self._log)
                 if after >= before:
                     self.q.put(("result", f"{src.name}: no reduction "
                                           f"({human(before)} -> {human(after)}) -> {dst}"))
@@ -321,7 +349,21 @@ def smoke() -> int:
         im.save(src, quality=95)
         before, after = core.compress_file(src, tmp / "out.pdf",
                                            quality=50, max_dim=1000)
-        return 0 if after < before else 1
+        rc = 0 if after < before else 1
+        if rc == 0 and ocr_layer is not None and ocr_layer.available():
+            from PIL import ImageFont
+            page = Image.new("L", (1700, 2200), 245)
+            ImageDraw.Draw(page).text((200, 180), "OCR SMOKE TOKEN 42",
+                                      fill=5, font=ImageFont.load_default(size=40))
+            s2 = tmp / "s2.pdf"
+            page.save(s2, quality=90)
+            got: list[str] = []
+            core.compress_file(s2, tmp / "o2.pdf", quality=50, max_dim=1000,
+                               ocr="eng", log=got.append)
+            if not any(m.strip().startswith("OCR:") and "0 words" not in m
+                       for m in got):
+                rc = 1
+        return rc
     except Exception:
         traceback.print_exc()
         return 1
